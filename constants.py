@@ -14,7 +14,7 @@ CONSTANTS_PHYSICS = {
     "T_0": Value(273.15, Unit.parse("K")),
     "p_0": Value(101325, Unit.parse("Pa")),
     "ε_0": Value(8.854187818e-12, Unit.parse("F/m")),
-    "μ_0": Value(8.854187818e-12, Unit.parse("F/m")),
+    "μ_0": Value(4e-7 * math.pi, Unit.parse("H/m")),
     "k": Value(8.987551787e9, Unit.parse("m/F")),
     "F": Value(96485.338, Unit.parse("C/mol")),
     "c": Value(2.99792458e8, Unit.parse("m/s")),
