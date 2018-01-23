@@ -3,6 +3,7 @@ import re
 from abc import ABC, abstractmethod
 from fractions import Fraction
 
+from context import FEATURE_FRAC, FEATURE_GRAPHIC
 from syntax import SUBTOKEN_NUMBER, Token
 import util
 from util import MathParseError, MathEvalError
@@ -27,16 +28,16 @@ UNIT_MAP = {
 }
 
 MUL_PREFIXES = [
-    ("da", 10),
-    ("h", 100),
-    ("k", 1000),
-    ("M", 1000 ** 2),
-    ("G", 1000 ** 3),
-    ("T", 1000 ** 4),
-    ("P", 1000 ** 5),
-    ("E", 1000 ** 6),
-    ("Z", 1000 ** 7),
-    ("Y", 1000 ** 8),
+    ("da", Fraction(10, 1)),
+    ("h", Fraction(100, 1)),
+    ("k", Fraction(1000, 1)),
+    ("M", Fraction(1000 ** 2, 1)),
+    ("G", Fraction(1000 ** 3, 1)),
+    ("T", Fraction(1000 ** 4, 1)),
+    ("P", Fraction(1000 ** 5, 1)),
+    ("E", Fraction(1000 ** 6, 1)),
+    ("Z", Fraction(1000 ** 7, 1)),
+    ("Y", Fraction(1000 ** 8, 1)),
     ("d", Fraction(1, 10)),
     ("c", Fraction(1, 100)),
     ("m", Fraction(1, 1000)),
@@ -48,7 +49,7 @@ MUL_PREFIXES = [
     ("a", Fraction(1, 1000) ** 6),
     ("z", Fraction(1, 1000) ** 7),
     ("y", Fraction(1, 1000) ** 8),
-    ("", 1),
+    ("", Fraction(1, 1)),
 ]
 
 WHITESPACE_RE = re.compile(r"\s+")
@@ -57,7 +58,7 @@ NUMBER_RE = re.compile(SUBTOKEN_NUMBER)
 def _parse_unit_part(text):
     try:
         result = NO_UNIT
-        total_mul = 1
+        total_mul = Fraction(1, 1)
         parts = WHITESPACE_RE.split(text)
         if parts == ["1"]:
             return total_mul, result
@@ -134,6 +135,23 @@ def _generate_unit_names(num, denom):
 def _generate_unit_name(num, denom):
     return min(_generate_unit_names(num, denom), key=lambda pair: pair[1])[0]
 
+def _mul_list_frac(lst, frac):
+    out = []
+    for i in range(0, len(lst), frac.denominator):
+        for j in range(1, frac.denominator):
+            if i + j > len(lst) or lst[i + j] != lst[i]:
+                raise ValueError
+        for j in range(frac.numerator):
+            out.append(lst[i])
+    return out
+
+def _stringify_frac(frac, context):
+    if context is not None and context.features[FEATURE_GRAPHIC]:
+        raise NotImplementedError
+    if frac.denominator == 1:
+        return str(frac.numerator)
+    return "%s/%s" % (frac.numerator, frac.denominator)
+
 class Unit:
     part_registry = {}
     name_registry = {}
@@ -180,12 +198,19 @@ class Unit:
     def __pow__(self, other):
         if other == 0 or self is NO_UNIT:
             return NO_UNIT
+        if isinstance(other, Fraction):
+            try:
+                return Unit.from_parts(_mul_list_frac(self.num, other), _mul_list_frac(self.denom, other))
+            except ValueError:
+                raise MathEvalError("cannot raise %s to power %s" % (self, other))
         if not isinstance(other, int) and not (isinstance(other, float) and other.is_integer()):
-            raise MathEvalError("cannot raise unit to non-integer power")
+            raise MathEvalError("cannot raise %s to non-integer power" % self)
         return Unit.from_parts(self.num * int(other), self.denom * int(other))
     def __eq__(self, other):
         return self is other or (self.num == other.num and self.denom == other.denom)
     def __repr__(self):
+        return self.stringify(None)
+    def stringify(self, _):
         return self.name
     def names(self):
         return [name for name, _ in sorted(_generate_unit_names(self.num, self.denom), key=lambda pair: pair[1])]
@@ -201,7 +226,7 @@ Unit.register("cd", 2, "luminous intensity", (UNIT_CANDELA,))
 
 Unit.register("N", 3, "force", (UNIT_KILOGRAM, UNIT_METER), (UNIT_SECOND, UNIT_SECOND))
 Unit.register("J", 3, "energy", (UNIT_KILOGRAM, UNIT_METER, UNIT_METER), (UNIT_SECOND, UNIT_SECOND))
-Unit.register("Pa", 4, "pressure", (UNIT_KILOGRAM,), (UNIT_SECOND, UNIT_SECOND, UNIT_METER, UNIT_METER))
+Unit.register("Pa", 4, "pressure", (UNIT_KILOGRAM,), (UNIT_SECOND, UNIT_SECOND, UNIT_METER))
 Unit.register("W", 4, "power", (UNIT_KILOGRAM, UNIT_METER, UNIT_METER), (UNIT_SECOND, UNIT_SECOND, UNIT_SECOND))
 
 Unit.register("C", 3, "electric charge", (UNIT_AMPERE, UNIT_SECOND))
@@ -221,6 +246,8 @@ Unit.register(None, 4, "volume", (UNIT_METER, UNIT_METER, UNIT_METER))
 Unit.register(None, 3, "speed", (UNIT_METER,), (UNIT_SECOND,))
 Unit.register(None, 4, "acceleration", (UNIT_METER,), (UNIT_SECOND, UNIT_SECOND))
 Unit.register(None, 4, "momentum", (UNIT_KILOGRAM, UNIT_METER), (UNIT_SECOND,))
+Unit.register(None, 5, "angular momentum", (UNIT_KILOGRAM, UNIT_METER, UNIT_METER), (UNIT_SECOND,))
+Unit.register(None, 5, "moment of inertia", (UNIT_KILOGRAM, UNIT_METER, UNIT_METER), ())
 Unit.register(None, 4, "electric field", (UNIT_KILOGRAM, UNIT_METER), (UNIT_SECOND, UNIT_SECOND, UNIT_SECOND, UNIT_AMPERE))
 
 Unit.register(None, 5, "thermal conductivity", (UNIT_KILOGRAM, UNIT_METER), (UNIT_SECOND, UNIT_SECOND, UNIT_SECOND, UNIT_KELVIN))
@@ -235,6 +262,11 @@ class ExpressionPart(ABC):
     @abstractmethod
     def evaluate(self, _1, _2):
         pass
+    @abstractmethod
+    def stringify(self, context):
+        pass
+    def __repr__(self):
+        return self.stringify(None)
     def __add__(self, other):
         return Expression([self, other], [OPERATOR_ADD])
     def __radd__(self, other):
@@ -266,10 +298,12 @@ class Value(ExpressionPart, Token):
         else:
             self.number = number
             self.unit = unit
-    def __repr__(self):
+    def stringify(self, context):
+        if context is not None and context.features[FEATURE_FRAC] and isinstance(self.number, Fraction):
+            return _stringify_frac(self.number, context) + " " + self.unit.stringify(context)
         if self.unit is NO_UNIT:
             return util.scientific(self.number)
-        return util.scientific(self.number) + " " + str(self.unit)
+        return util.scientific(self.number) + " " + self.unit.stringify(context)
     def token_name(self):
         return "value " + self.__repr__()
     def evaluate(self, _1, _2):
@@ -321,12 +355,11 @@ class Value(ExpressionPart, Token):
         unit_mul, unit = Unit.parse(text[unit_start:])
         return Value(number * unit_mul, unit)
 
-def _str_expr(expr, max_paren_prec):
-    if isinstance(expr, Expression) and expr.prec <= max_paren_prec:
-        return "(" + str(expr) + ")"
-    if isinstance(expr, PowerExpression) and PREC_POWER <= max_paren_prec:
-        return "(" + str(expr) + ")"
-    return str(expr)
+def _str_expr(expr, max_paren_prec, context):
+    if ((isinstance(expr, Expression) and expr.prec <= max_paren_prec)
+            or (isinstance(expr, PowerExpression) and PREC_POWER <= max_paren_prec)):
+        return "(" + expr.stringify(context) + ")"
+    return expr.stringify(context)
 
 class Expression(ExpressionPart):
     def __init__(self, subexprs, operators):
@@ -347,9 +380,10 @@ class Expression(ExpressionPart):
                 self.subexprs.extend(expr.subexprs)
             else:
                 self.subexprs.append(expr)
-    def __repr__(self):
-        return _str_expr(self.subexprs[0], self.prec) + "".join(
-            " " + oper.name + " " + _str_expr(expr, self.prec) for expr, oper in zip(self.subexprs[1:], self.operators)
+    def stringify(self, context):
+        return _str_expr(self.subexprs[0], self.prec, context) + "".join(
+            " " + oper.name + " " + _str_expr(expr, self.prec, context)
+            for expr, oper in zip(self.subexprs[1:], self.operators)
         )
     def evaluate(self, context, var_stack):
         accum_value = None
@@ -380,8 +414,8 @@ class Expression(ExpressionPart):
 class PowerExpression(ExpressionPart):
     def __init__(self, subexprs):
         self.subexprs = subexprs
-    def __repr__(self):
-        return " ^ ".join(_str_expr(expr, PREC_POWER) for expr in self.subexprs)
+    def stringify(self, context):
+        return " ^ ".join(_str_expr(expr, PREC_POWER, context) for expr in self.subexprs)
     def evaluate(self, context, var_stack):
         accum_value = self.subexprs[-1].evaluate(context, var_stack)
         if not isinstance(accum_value, Value):
@@ -402,8 +436,8 @@ class PowerExpression(ExpressionPart):
 class UnaryMinus(ExpressionPart):
     def __init__(self, subexpr):
         self.subexpr = subexpr
-    def __repr__(self):
-        return "-" + _str_expr(self.subexpr, PREC_POWER)
+    def stringify(self, context):
+        return "-" + _str_expr(self.subexpr, PREC_POWER, context)
     def evaluate(self, context, var_stack):
         return -self.subexpr.evaluate(context, var_stack)
     @staticmethod
@@ -419,7 +453,7 @@ class UnaryMinus(ExpressionPart):
 class Variable(ExpressionPart, Token):
     def __init__(self, name):
         self.name = name
-    def __repr__(self):
+    def stringify(self, _):
         return self.name
     def token_name(self):
         return "variable " + self.name
@@ -442,7 +476,7 @@ class Output(ExpressionPart, Token):
         self.index = index
     def evaluate(self, context, var_stack):
         return context.outputs[self.index - 1].evaluate(context, var_stack)
-    def __repr__(self):
+    def stringify(self, _):
         return "[" + str(self.index) + "]"
     def token_name(self):
         return "output ref [" + str(self.index) + "]"

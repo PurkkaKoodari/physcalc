@@ -1,3 +1,18 @@
+class debug: # pylint: disable=invalid-name
+    recur = 0
+    def __init__(self, func):
+        self.func = func
+    def __call__(self, *args, **kwargs):
+        argstr = [self.func.__name__]
+        argstr.extend(repr(arg) for arg in args)
+        argstr.extend(key + "=" + repr(val) for key, val in kwargs.values())
+        print(" " * debug.recur + ">" + " ".join(argstr))
+        debug.recur += 1
+        ret = self.func(*args, **kwargs)
+        debug.recur -= 1
+        print(" " * debug.recur + "<" + self.func.__name__ + " " + repr(ret))
+        return ret
+    
 def iterlen(itr):
     return sum(1 for _ in itr)
 
@@ -36,18 +51,3 @@ def scientific(num):
         mul *= 10
         power += 1
     return str(float(num / mul)) + "\xB710" + generate_sup_power(power)
-
-class debug: # pylint: disable=invalid-name
-    recur = 0
-    def __init__(self, func):
-        self.func = func
-    def __call__(self, *args, **kwargs):
-        argstr = [self.func.__name__]
-        argstr.extend(repr(arg) for arg in args)
-        argstr.extend(key + "=" + repr(val) for key, val in kwargs.values())
-        print(" " * debug.recur + ">" + " ".join(argstr))
-        debug.recur += 1
-        ret = self.func(*args, **kwargs)
-        debug.recur -= 1
-        print(" " * debug.recur + "<" + self.func.__name__ + " " + repr(ret))
-        return ret

@@ -3,7 +3,8 @@ import os
 
 import parser
 from constants import CONSTANTS_MATH, VARS
-from helps import HELPS, HELP_GLOBAL, HELP_LOAD
+from context import Context, FEATURE_DEBUG
+from helps import HELPS, HELP_GLOBAL, HELP_LOAD, HELP_TOGGLE
 from util import MathParseError, MathEvalError
 from value import Value
 
@@ -12,38 +13,59 @@ VERSION = "0.2"
 
 LAUNCH_CREDITS = APPLICATION + " REPL " + VERSION + "\nType !help for help"
 
-class Context:
-    def __init__(self):
-        self.outputs = []
-        self.variables = dict(CONSTANTS_MATH)
+COMMANDS = {}
+
+def _register_command(name):
+    def wrapper(func):
+        COMMANDS[name] = func
+        return func
+    return wrapper
+
+@_register_command("!help")
+def _command_help(_, args):
+    if args and args[0] in HELPS:
+        print(HELPS[args[0]])
+    else:
+        print(HELP_GLOBAL)
+
+@_register_command("!load")
+def _command_load(context, args):
+    if len(args) != 1 or args[0] not in VARS:
+        print(HELP_LOAD)
+    else:
+        context.variables.update(VARS[args[0]])
+
+@_register_command("!vars")
+def _command_vars(context, _):
+    for var in sorted(context.variables):
+        print(var + " = " + context.variables[var].evaluate(context, []).stringify(context))
+
+@_register_command("!reset")
+def _command_reset(context, _):
+    context.variables = dict(CONSTANTS_MATH)
+    context.outputs.clear()
+    print("Variables and history cleared.")
+
+@_register_command("!clear")
+def _command_clear(context, _):
+    context.outputs.clear()
+    print("History cleared.")
+
+@_register_command("!toggle")
+def _command_toggle(context, args):
+    if args and args[0] in context.features:
+        context.features[args[0]] = not context.features[args[0]]
+        print("Toggled " + args[0] + " " + ["off", "on"][context.features[args[0]]] + ".")
+    else:
+        print(HELP_TOGGLE)
 
 def _run_command(context, command, *args):
-    if command == "!help":
-        if args and args[0] in HELPS:
-            print(HELPS[args[0]])
-        else:
-            print(HELP_GLOBAL)
-    elif command == "!load":
-        if len(args) != 1 or args[0] not in VARS:
-            print(HELP_LOAD)
-        else:
-            context.variables.update(VARS[args[0]])
-    elif command == "!vars":
-        for var in sorted(context.variables):
-            print(var + " = " + str(context.variables[var]))
-    elif command == "!reset":
-        context.variables = dict(CONSTANTS_MATH)
-        context.outputs.clear()
-        print("Variables and history cleared.")
-    elif command == "!clear":
-        context.outputs.clear()
-        print("History cleared.")
+    if command in COMMANDS:
+        COMMANDS[command](context, args)
     else:
         print("Unknown command " + command + ". Type !help for help.")
 
-def _main():
-    print(LAUNCH_CREDITS)
-    context = Context()
+def _setup_readline():
     # setup readline if on posix
     if os.name == "posix":
         try:
@@ -59,6 +81,11 @@ def _main():
             atexit.register(readline.write_history_file, history_file)
         except ImportError:
             pass
+
+def _main():
+    _setup_readline()
+    print(LAUNCH_CREDITS)
+    context = Context()
     while True:
         prompt = " " * len(str(len(context.outputs))) + " > "
         try:
@@ -72,14 +99,18 @@ def _main():
             _run_command(context, *line.split(None))
         else:
             try:
-                code = parser.parse_input(line, context)
-                print("(" + str(len(context.outputs) + 1) + ") " + str(code))
+                assigns, code = parser.parse_input(line, context)
+                if context.features[FEATURE_DEBUG]:
+                    print("(" + str(len(context.outputs) + 1) + ") " + code.stringify(context))
                 result = code.evaluate(context, [])
                 context.outputs.append(result)
+                for variable in assigns:
+                    context.variables[variable.name] = result
+                print("[" + str(len(context.outputs)) + "] " + result.stringify(context), end="")
                 if isinstance(result, Value) and result.unit.variable is not None:
-                    print("[" + str(len(context.outputs)) + "] " + str(result) + " (" + result.unit.variable + ")")
+                    print(" (" + result.unit.variable + ")")
                 else:
-                    print("[" + str(len(context.outputs)) + "] " + str(result))
+                    print()
             except MathParseError as ex:
                 print("Syntax error: " + ex.args[0])
             except MathEvalError as ex:

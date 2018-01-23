@@ -1,5 +1,6 @@
 import re
 
+from context import FEATURE_CONT
 from syntax import ESCAPE_REGEX, TOKEN_OUTPUT, TOKEN_OPERATOR, TOKEN_VARIABLE, TOKEN_VALUE, TOKEN_SPECIAL, Token
 from util import MathParseError, debug
 from value import Output, Operator, Variable, Value, Expression, PowerExpression, UnaryMinus
@@ -16,12 +17,13 @@ class SpecialToken(Token):
     def token_name(self):
         return self.name
 
-ASSIGNMENT = SpecialToken("assignment operator")
+EQUALS = SpecialToken("equals")
+ASSIGNMENT = SpecialToken("assignment")
 LEFT_PAREN = SpecialToken("left paren")
 RIGHT_PAREN = SpecialToken("right paren")
 
 SPECIAL_TOKENS = {
-    "=": ASSIGNMENT,
+    "=": EQUALS,
     ":=": ASSIGNMENT,
     "(": LEFT_PAREN,
     ")": RIGHT_PAREN,
@@ -67,6 +69,13 @@ def parse_input(text, context):
     text = ESCAPE_REGEX.sub(_replace_escape, text)
     tokens = list(_tokenize_input(text, context))
     pos = 0
+    assignments = []
+    while pos + 1 < len(tokens) and tokens[pos + 1] is ASSIGNMENT:
+        if not isinstance(tokens[pos], Variable):
+            raise MathParseError("cannot assign to " + tokens[pos].token_name())
+        assignments.append(tokens[pos])
+        pos += 2
+    start = pos
     def parse_primary():
         nonlocal pos
         if pos >= len(tokens):
@@ -75,9 +84,9 @@ def parse_input(text, context):
             if tokens[pos].is_unary:
                 pos += 1
                 return UnaryMinus(parse_primary())
-            elif pos == 0:
-                if not context.outputs:
-                    raise MathParseError("missing value before " + str(tokens[pos]))
+            elif pos == start:
+                if not context.features[FEATURE_CONT] or not context.outputs:
+                    raise MathParseError("missing value before " + tokens[pos].token_name())
                 else:
                     return context.outputs[-1]
             else:
@@ -93,7 +102,9 @@ def parse_input(text, context):
             return tokens[pos - 1]
     def parse_recursive(prec, allow_paren, consume_paren):
         nonlocal pos
-        subexprs = [parse_primary()]
+        if prec > PREC_POWER:
+            return parse_primary()
+        subexprs = [parse_recursive(prec + 1, allow_paren, consume_paren)]
         operators = []
         while pos < len(tokens):
             if tokens[pos] is RIGHT_PAREN:
@@ -105,8 +116,7 @@ def parse_input(text, context):
             elif isinstance(tokens[pos], Operator):
                 if tokens[pos].prec < prec:
                     break
-                assert tokens[pos].prec == prec or not operators
-                prec = tokens[pos].prec
+                assert tokens[pos].prec == prec
                 operators.append(tokens[pos])
                 pos += 1
                 subexprs.append(parse_recursive(prec + 1, allow_paren, False))
@@ -117,4 +127,4 @@ def parse_input(text, context):
         if operators[0].prec == PREC_POWER:
             return PowerExpression(subexprs)
         return Expression(subexprs, operators)
-    return parse_recursive(PREC_ADD, False, False)
+    return assignments, parse_recursive(PREC_ADD, False, False)
