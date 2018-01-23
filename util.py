@@ -23,7 +23,7 @@ class MathEvalError(Exception):
     pass
 
 def scientific(num):
-    if 0.1 <= abs(num) < 1000000:
+    if num == 0 or 0.1 <= abs(num) < 1000000:
         return str(float(num))
     power = 0
     mul = 1
@@ -37,7 +37,7 @@ def scientific(num):
         power += 1
     return str(float(num / mul)) + "\xB710" + generate_sup_power(power)
 
-class debug:
+class debug: # pylint: disable=invalid-name
     recur = 0
     def __init__(self, func):
         self.func = func

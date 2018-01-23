@@ -8,7 +8,7 @@ from util import MathParseError, MathEvalError
 from value import Value
 
 APPLICATION = "ρhysCalc"
-VERSION = "0.1"
+VERSION = "0.2"
 
 LAUNCH_CREDITS = APPLICATION + " REPL " + VERSION + "\nType !help for help"
 

@@ -15,7 +15,6 @@ UNIT_SECOND = 4
 UNIT_KELVIN = 5
 UNIT_MOLE = 6
 UNIT_CANDELA = 7
-UNIT_RADIAN = 8
 
 UNIT_MAP = {
     UNIT_METER: "m",
@@ -25,7 +24,6 @@ UNIT_MAP = {
     UNIT_AMPERE: "A",
     UNIT_MOLE: "mol",
     UNIT_CANDELA: "cd",
-    UNIT_RADIAN: "r",
 }
 
 MUL_PREFIXES = [
@@ -200,9 +198,6 @@ Unit.register("s", 2, "time", (UNIT_SECOND,))
 Unit.register("K", 2, "temperature", (UNIT_KELVIN,))
 Unit.register("mol", 2, "amount of substance", (UNIT_MOLE,))
 Unit.register("cd", 2, "luminous intensity", (UNIT_CANDELA,))
-Unit.register("r", 2, "angle", (UNIT_RADIAN,))
-
-Unit.register("sr", 2, "solid angle", (UNIT_RADIAN, UNIT_RADIAN))
 
 Unit.register("N", 3, "force", (UNIT_KILOGRAM, UNIT_METER), (UNIT_SECOND, UNIT_SECOND))
 Unit.register("J", 3, "energy", (UNIT_KILOGRAM, UNIT_METER, UNIT_METER), (UNIT_SECOND, UNIT_SECOND))
@@ -219,7 +214,6 @@ Unit.register("T", 4, "magnetic field", (UNIT_KILOGRAM,), (UNIT_SECOND, UNIT_SEC
 Unit.register("H", 4, "inductance", (UNIT_KILOGRAM, UNIT_METER, UNIT_METER), (UNIT_SECOND, UNIT_SECOND, UNIT_AMPERE, UNIT_AMPERE))
 
 Unit.register("lux", 3, "illuminance", (UNIT_CANDELA,), (UNIT_METER, UNIT_METER))
-Unit.register("lm", 3, "luminous flux", (UNIT_CANDELA, UNIT_RADIAN, UNIT_RADIAN))
 Unit.register("Hz", 4, "frequency", (), (UNIT_SECOND,))
 
 Unit.register(None, 3, "area", (UNIT_METER, UNIT_METER))
@@ -227,7 +221,6 @@ Unit.register(None, 4, "volume", (UNIT_METER, UNIT_METER, UNIT_METER))
 Unit.register(None, 3, "speed", (UNIT_METER,), (UNIT_SECOND,))
 Unit.register(None, 4, "acceleration", (UNIT_METER,), (UNIT_SECOND, UNIT_SECOND))
 Unit.register(None, 4, "momentum", (UNIT_KILOGRAM, UNIT_METER), (UNIT_SECOND,))
-Unit.register(None, 3, "torque", (UNIT_KILOGRAM, UNIT_METER, UNIT_METER), (UNIT_SECOND, UNIT_SECOND, UNIT_RADIAN))
 Unit.register(None, 4, "electric field", (UNIT_KILOGRAM, UNIT_METER), (UNIT_SECOND, UNIT_SECOND, UNIT_SECOND, UNIT_AMPERE))
 
 Unit.register(None, 5, "thermal conductivity", (UNIT_KILOGRAM, UNIT_METER), (UNIT_SECOND, UNIT_SECOND, UNIT_SECOND, UNIT_KELVIN))
