@@ -1,6 +1,6 @@
 import math
 
-from value import Value, Unit
+from physcalc.value import Value, Unit
 
 CONSTANTS_MATH = {
     "e": Value(math.e, Unit.parse("")),

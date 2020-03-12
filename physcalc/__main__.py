@@ -1,12 +1,12 @@
 import atexit
 import os
 
-import parser
-from constants import CONSTANTS_MATH, VARS
-from context import Context, FEATURE_DEBUG
-from helps import HELPS, HELP_GLOBAL, HELP_LOAD, HELP_TOGGLE
-from util import MathParseError, MathEvalError
-from value import Value
+from physcalc import parser
+from physcalc.constants import CONSTANTS_MATH, VARS
+from physcalc.context import Context, FEATURE_DEBUG
+from physcalc.helps import HELPS, HELP_GLOBAL, HELP_LOAD, HELP_TOGGLE
+from physcalc.util import MathParseError, MathEvalError
+from physcalc.value import Value
 
 APPLICATION = "ρhysCalc"
 VERSION = "0.2"
@@ -116,5 +116,4 @@ def _main():
             except MathEvalError as ex:
                 print("Error: " + ex.args[0])
 
-if __name__ == "__main__":
-    _main()
+_main()

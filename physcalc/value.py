@@ -3,10 +3,10 @@ import re
 from abc import ABC, abstractmethod
 from fractions import Fraction
 
-from context import FEATURE_FRAC, FEATURE_GRAPHIC
-from syntax import SUBTOKEN_NUMBER, Token
-import util
-from util import MathParseError, MathEvalError
+from physcalc.context import FEATURE_FRAC, FEATURE_GRAPHIC
+from physcalc.syntax import SUBTOKEN_NUMBER, Token
+from physcalc import util
+from physcalc.util import MathParseError, MathEvalError
 
 DIV_SEPARATOR = 0
 UNIT_AMPERE = 1

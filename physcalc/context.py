@@ -5,7 +5,7 @@ FEATURE_CONT = "cont"
 
 class Context:
     def __init__(self):
-        from constants import CONSTANTS_MATH
+        from physcalc.constants import CONSTANTS_MATH
         self.outputs = []
         self.variables = dict(CONSTANTS_MATH)
         self.features = {

@@ -1,5 +1,4 @@
-import constants
-import context
+from physcalc import constants, context
 
 HELP_SYNTAX = """PhysCalc parses input as operators and values.
 

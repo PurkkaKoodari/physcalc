@@ -1,10 +1,10 @@
 import re
 
-from context import FEATURE_CONT
-from syntax import ESCAPE_REGEX, TOKEN_OUTPUT, TOKEN_OPERATOR, TOKEN_VARIABLE, TOKEN_VALUE, TOKEN_SPECIAL, Token
-from util import MathParseError, debug
-from value import Output, Operator, Variable, Value, Expression, PowerExpression, UnaryMinus
-from value import PREC_ADD, PREC_MULTIPLY, PREC_POWER
+from physcalc.context import FEATURE_CONT
+from physcalc.syntax import ESCAPE_REGEX, TOKEN_OUTPUT, TOKEN_OPERATOR, TOKEN_VARIABLE, TOKEN_VALUE, TOKEN_SPECIAL, Token
+from physcalc.util import MathParseError, debug
+from physcalc.value import Output, Operator, Variable, Value, Expression, PowerExpression, UnaryMinus
+from physcalc.value import PREC_ADD, PREC_MULTIPLY, PREC_POWER
 
 MAX_UNIT_WEIGHT = 5
 
