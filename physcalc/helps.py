@@ -44,13 +44,17 @@ Toggles a feature of the interpreter. Features:
     context.FEATURE_DEBUG, context.FEATURE_FRAC,
     context.FEATURE_GRAPHIC, context.FEATURE_CONT,
 )
+HELP_SOURCE = """Usage: !source <file>
+Executes <file> in the current REPL."""
 HELP_COMMANDS = """Commands:
 !help [topic]  - show help
 !load <vars>   - load constants
 !vars          - show variables
 !reset         - reset variables and outputs
 !clear         - reset output history
-!toggle <feat> - toggle features"""
+!toggle <feat> - toggle features
+!source <file> - execute file
+!exit          - quit REPL"""
 HELPS = {
     "syntax": HELP_SYNTAX,
     "greek": HELP_GREEK,
