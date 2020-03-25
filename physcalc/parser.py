@@ -104,7 +104,7 @@ def parse_input(text, context):
         nonlocal pos
         if prec > PREC_POWER:
             return parse_primary()
-        subexprs = [parse_recursive(prec + 1, allow_paren, consume_paren)]
+        subexprs = [parse_recursive(prec + 1, allow_paren, False)]
         operators = []
         while pos < len(tokens):
             if tokens[pos] is RIGHT_PAREN:
