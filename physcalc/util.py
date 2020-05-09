@@ -37,17 +37,24 @@ class MathParseError(Exception):
 class MathEvalError(Exception):
     pass
 
-def scientific(num):
+def scientific(num, imag=""):
+    if num.imag != 0:
+        if num.real == 0:
+            return scientific(num.imag, "j")
+        if num.imag < 0:
+            return "(" + scientific(num.real) + scientific(num.imag, "j") + ")"
+        return "(" + scientific(num.real) + "+" + scientific(num.imag, "j") + ")"
+    num = num.real
     if num == 0 or 0.1 <= abs(num) < 1000000:
-        return str(float(num))
+        return str(float(num)) + imag
     power = 0
     mul = 1
     if abs(num) < 10:
         while abs(num * mul) < 1:
             mul *= 10
             power -= 1
-        return str(float(num * mul)) + "\xB710" + generate_sup_power(power)
+        return str(float(num * mul)) + "\xB710" + generate_sup_power(power) + ("\xB7" + imag if imag else "")
     while abs(num / mul) >= 10:
         mul *= 10
         power += 1
-    return str(float(num / mul)) + "\xB710" + generate_sup_power(power)
+    return str(float(num / mul)) + "\xB710" + generate_sup_power(power) + ("\xB7" + imag if imag else "")

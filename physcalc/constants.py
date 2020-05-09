@@ -6,6 +6,7 @@ CONSTANTS_MATH = {
     "e": Value(math.e, Unit.parse("")),
     "pi": Value(math.pi, Unit.parse("")),
     "π": Value(math.pi, Unit.parse("")),
+    "j": Value(1j, Unit.parse("")),
 }
 
 CONSTANTS_PHYSICS = {
