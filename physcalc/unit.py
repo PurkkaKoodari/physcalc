@@ -1,11 +1,12 @@
 import math
 import re
-from collections import Counter
+from collections import Counter, OrderedDict, defaultdict
 from enum import IntEnum
 from fractions import Fraction
 from itertools import groupby, combinations, permutations
 from numbers import Real
-from typing import Iterable, Tuple, List, Dict, TypeVar, Optional, Set, Mapping
+from typing import FrozenSet
+from typing import Iterable, Tuple, List, Dict, TypeVar, Optional, Set, Mapping, DefaultDict
 
 from physcalc.util import (MathParseError, MathEvalError, parse_power, generate_sup_power, iterlen, ensure_real,
                            ensure_int)
@@ -33,7 +34,7 @@ BASE_UNIT_NAMES = {
     BaseUnit.CANDELA: "cd",
 }
 
-MUL_PREFIXES = [
+MUL_PREFIXES = OrderedDict((
     ("", Fraction(1, 1)),
     ("da", Fraction(10, 1)),
     ("h", Fraction(100, 1)),
@@ -48,22 +49,30 @@ MUL_PREFIXES = [
     ("d", Fraction(1, 10)),
     ("c", Fraction(1, 100)),
     ("m", Fraction(1, 1000)),
-    ("u", Fraction(1, 1000) ** 2),
     ("μ", Fraction(1, 1000) ** 2),
+    ("u", Fraction(1, 1000) ** 2),
     ("n", Fraction(1, 1000) ** 3),
     ("p", Fraction(1, 1000) ** 4),
     ("f", Fraction(1, 1000) ** 5),
     ("a", Fraction(1, 1000) ** 6),
     ("z", Fraction(1, 1000) ** 7),
     ("y", Fraction(1, 1000) ** 8),
-]
+))
+
+# by default, non-multiplicative units won't be prefixed with the non-1000^n prefixes
+DEFAULT_DISALLOWED_PREFIXES = frozenset(("c", "d", "da", "h"))
+# by default, multiplicative and anonymous units won't be prefixed at all
+ALL_DISALLOWED_PREFIXES = frozenset(MUL_PREFIXES.keys()) - frozenset(("",))
+
+DISALLOWED_PREFIXES: "DefaultDict[Unit, FrozenSet[str]]" = defaultdict(lambda: ALL_DISALLOWED_PREFIXES)
+PREFIX_POWER: "DefaultDict[Unit, int]" = defaultdict(lambda: 1)
 
 WHITESPACE_RE = re.compile(r"\s+")
 
 
 def _parse_multiplied_unit(unit_name: str) -> "Unit":
     """Parses a unit name with optional multiplier."""
-    for prefix, prefix_mul in MUL_PREFIXES:
+    for prefix, prefix_mul in MUL_PREFIXES.items():
         for name, unit in Unit.name_registry.items():
             if unit_name == prefix + name:
                 return unit * prefix_mul
@@ -169,20 +178,26 @@ class Unit:
             Unit.output_units.add(self)
         Unit.name_registry[self.name] = self
 
-    def register_derivative(self, specific_name: str, multiplier: Real):
+    def register_derivative(self, specific_name: str, multiplier: Real, disallowed_prefixes=None):
         """Creates a new derivative Unit of this Unit."""
         deriv = Unit(specific_name, self._num, self._denom, 1000, self.quantity_name, self.multiplier * multiplier)
         deriv._register_name(True)
+        if disallowed_prefixes is not None:
+            DISALLOWED_PREFIXES[deriv] = disallowed_prefixes
         return deriv
 
     @staticmethod
-    def register(specific_name: Optional[str], output_weight: int, quantity_name: str, num, denom=()):
+    def register(specific_name: Optional[str], output_weight: int, quantity_name: str, num, denom=(), disallowed_prefixes=None, prefix_power=None):
         """Creates a new Unit with the given properties."""
         num, denom = _cancel_unit_parts(num, denom)
         created = Unit(specific_name, num, denom, output_weight, quantity_name)
         created._register_key()
         if specific_name is not None:
             created._register_name(False)
+        if specific_name is not None or disallowed_prefixes is not None:
+            DISALLOWED_PREFIXES[created] = DEFAULT_DISALLOWED_PREFIXES if disallowed_prefixes is None else frozenset(disallowed_prefixes)
+        if prefix_power is not None:
+            PREFIX_POWER[created] = prefix_power
         return created
 
     @staticmethod
@@ -315,7 +330,7 @@ class Unit:
         return self.name == other.name and self._num == other._num and self._denom == other._denom and self.multiplier == other.multiplier
 
     def __hash__(self):
-        return hash((self.name, self._num, self._denom, self.multiplier))
+        return hash((self._name if self.specific_name else None, self._num, self._denom, self.multiplier))
 
     def __str__(self):
         return self.name or "1"
@@ -330,7 +345,7 @@ class Unit:
         return self.multiplier, Unit.from_parts(self._num, self._denom, 1)
 
 
-NO_UNIT = Unit.register(None, 2, "number", ())
+NO_UNIT = Unit.register(None, 2, "number", (), (), ALL_DISALLOWED_PREFIXES)
 
 # SI base units
 AMPERE = Unit.register("A", 2, "electric current", (BaseUnit.AMPERE,))
@@ -344,7 +359,7 @@ CANDELA = Unit.register("cd", 2, "luminous intensity", (BaseUnit.CANDELA,))
 # SI derived units
 NEWTON = Unit.register("N", 3, "force", (BaseUnit.KILOGRAM, BaseUnit.METER), (BaseUnit.SECOND, BaseUnit.SECOND))
 JOULE = Unit.register("J", 3, "energy", (BaseUnit.KILOGRAM, BaseUnit.METER, BaseUnit.METER), (BaseUnit.SECOND, BaseUnit.SECOND))
-PASCAL = Unit.register("Pa", 4, "pressure", (BaseUnit.KILOGRAM,), (BaseUnit.SECOND, BaseUnit.SECOND, BaseUnit.METER))
+PASCAL = Unit.register("Pa", 4, "pressure", (BaseUnit.KILOGRAM,), (BaseUnit.SECOND, BaseUnit.SECOND, BaseUnit.METER), ("c", "d", "da"))
 WATT = Unit.register("W", 4, "power", (BaseUnit.KILOGRAM, BaseUnit.METER, BaseUnit.METER), (BaseUnit.SECOND, BaseUnit.SECOND, BaseUnit.SECOND))
 
 COULOMB = Unit.register("C", 3, "electric charge", (BaseUnit.AMPERE, BaseUnit.SECOND))
@@ -362,14 +377,14 @@ LUX = Unit.register("lux", 3, "illuminance", (BaseUnit.CANDELA,), (BaseUnit.METE
 LUMEN = CANDELA.register_derivative("lm", 1)
 
 GRAY = Unit.register("Gy", 5, "radiation dose", (BaseUnit.METER, BaseUnit.METER), (BaseUnit.SECOND, BaseUnit.SECOND))
-KATAL = Unit.register("kat", 5, "katalytic activity", (BaseUnit.MOLE,), (BaseUnit.SECOND,))
+KATAL = Unit.register("kat", 5, "katalytic activity", (BaseUnit.MOLE,), (BaseUnit.SECOND,), ALL_DISALLOWED_PREFIXES)
 
-BECQUEREL = HERTZ.register_derivative("Bq", 1)
-SIEVERT = GRAY.register_derivative("Sv", 1)
+BECQUEREL = HERTZ.register_derivative("Bq", 1, DEFAULT_DISALLOWED_PREFIXES)
+SIEVERT = GRAY.register_derivative("Sv", 1, DEFAULT_DISALLOWED_PREFIXES)
 
 # Named quantities without named SI units
-AREA = Unit.register(None, 3, "area", (BaseUnit.METER, BaseUnit.METER))
-VOLUME = Unit.register(None, 4, "volume", (BaseUnit.METER, BaseUnit.METER, BaseUnit.METER))
+AREA = Unit.register(None, 3, "area", (BaseUnit.METER, BaseUnit.METER), (), ("d", "da", "h"), 2)
+VOLUME = Unit.register(None, 4, "volume", (BaseUnit.METER, BaseUnit.METER, BaseUnit.METER), (), ("da", "h"), 3)
 SPEED = Unit.register(None, 3, "speed", (BaseUnit.METER,), (BaseUnit.SECOND,))
 ACCELERATION = Unit.register(None, 4, "acceleration", (BaseUnit.METER,), (BaseUnit.SECOND, BaseUnit.SECOND))
 MOMENTUM = Unit.register(None, 4, "momentum", (BaseUnit.KILOGRAM, BaseUnit.METER), (BaseUnit.SECOND,))
@@ -401,12 +416,12 @@ RADIOACTIVE_EXPOSURE = Unit.register(None, 5, "radioactive exposure", (BaseUnit.
 
 # Multiplied SI units
 ANGSTROM = METER.register_derivative("Å", Fraction(1, 10 ** 10))
-GRAM = KILOGRAM.register_derivative("g", Fraction(1, 1000))
+GRAM = KILOGRAM.register_derivative("g", Fraction(1, 1000), DEFAULT_DISALLOWED_PREFIXES)
 ERG = JOULE.register_derivative("erg", Fraction(1, 10 ** 7))
-LITER = VOLUME.register_derivative("l", Fraction(1, 1000))
+LITER = VOLUME.register_derivative("l", Fraction(1, 1000), ("da", "h"))
 HECTARE = AREA.register_derivative("ha", 10000)
 
-BAR = PASCAL.register_derivative("bar", 100000)
+BAR = PASCAL.register_derivative("bar", 100000, DEFAULT_DISALLOWED_PREFIXES)
 ATM = PASCAL.register_derivative("atm", 101325)
 MM_MERCURY = PASCAL.register_derivative("mmHg", 133.322387415)
 INCH_MERCURY = PASCAL.register_derivative("inHg", 3386.389)
@@ -423,12 +438,12 @@ DEGREE = NO_UNIT.register_derivative("deg", math.pi / 180)
 ARC_MINUTE = DEGREE.register_derivative("'", 1 / 60)
 ARC_SECOND = ARC_MINUTE.register_derivative("\"", 1 / 60)
 
-CALORIE = JOULE.register_derivative("cal", 4.184)
-ELECTRON_VOLT = JOULE.register_derivative("eV", 1.602176634e-19)
+CALORIE = JOULE.register_derivative("cal", 4.184, DEFAULT_DISALLOWED_PREFIXES)
+ELECTRON_VOLT = JOULE.register_derivative("eV", 1.602176634e-19, DEFAULT_DISALLOWED_PREFIXES)
 
-CURIE = BECQUEREL.register_derivative("Ci", 3.7e10)
-RAD = GRAY.register_derivative("rad", Fraction(1, 10000))
-ROENTGEN = RADIOACTIVE_EXPOSURE.register_derivative("R", 2.58e-4)
+CURIE = BECQUEREL.register_derivative("Ci", 3.7e10, DEFAULT_DISALLOWED_PREFIXES)
+RAD = GRAY.register_derivative("rad", Fraction(1, 10000), DEFAULT_DISALLOWED_PREFIXES)
+ROENTGEN = RADIOACTIVE_EXPOSURE.register_derivative("R", 2.58e-4, DEFAULT_DISALLOWED_PREFIXES)
 
 # US customary units
 INCH = METER.register_derivative("in", 0.0254)

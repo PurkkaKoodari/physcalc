@@ -1,3 +1,4 @@
+import math
 import re
 from abc import ABC, abstractmethod
 from fractions import Fraction
@@ -7,7 +8,7 @@ from physcalc.context import Context, Feature
 from physcalc.operator import (OpPrecedence, OPERATOR_ADD, OPERATOR_SUBTRACT, OPERATOR_MULTIPLY, OPERATOR_DIVIDE,
                                Operator)
 from physcalc.syntax import PART_NUMBER, Token
-from physcalc.unit import Unit, NO_UNIT
+from physcalc.unit import Unit, NO_UNIT, MUL_PREFIXES, KILOGRAM, GRAM, DISALLOWED_PREFIXES, PREFIX_POWER
 from physcalc.util import MathParseError, MathEvalError, scientific, stringify_frac
 
 NUMBER_RE = re.compile(PART_NUMBER)
@@ -62,6 +63,13 @@ class ExpressionPart(ABC):
         return UnaryMinus.create(self)
 
 
+def _prefix_cost(value):
+    value = abs(value)
+    if value < 1:
+        return 4 - math.log10(value)
+    return math.log10(value)
+
+
 class Value(ExpressionPart, Token):
     def __init__(self, number, unit):
         if isinstance(unit, tuple):
@@ -73,16 +81,27 @@ class Value(ExpressionPart, Token):
         assert self.unit.multiplier == 1
 
     def stringify(self, context, unit):
-        if context is not None and context.features[Feature.FRAC] and isinstance(self.number, Fraction):
-            return stringify_frac(self.number, context) + " " + self.unit.name
+        # convert to requested unit if possible
         if unit is not None and unit is not NO_UNIT and self.unit.can_convert(unit):
-            return scientific(self.number / unit.multiplier) + " " + unit.name
-        if self.unit is NO_UNIT:
-            return scientific(self.number)
-        return scientific(self.number) + " " + self.unit.name
+            value = self.number / unit.multiplier
+        else:
+            value = self.number
+            unit = self.unit
+        # prioritize frac output
+        if context is not None and context.features[Feature.FRAC] and isinstance(value, Fraction):
+            return stringify_frac(value, context) + (" " + unit.name).rstrip()
+        # attempt to choose a SI prefix
+        if unit == KILOGRAM:  # special handling for kg -> g
+            unit = GRAM
+            value *= 1000
+        disallowed = DISALLOWED_PREFIXES[unit]
+        allowed = [prefix for prefix in MUL_PREFIXES if prefix not in disallowed]
+        power = PREFIX_POWER[unit]
+        optimal = min(allowed, key=lambda prefix: _prefix_cost(value / MUL_PREFIXES[prefix] ** power))
+        return scientific(value / MUL_PREFIXES[optimal] ** power) + (" " + optimal + unit.name).rstrip()
 
     def token_name(self):
-        return "value " + self.__repr__()
+        return "value " + self.__str__()
 
     def evaluate(self, _1, _2):
         return self

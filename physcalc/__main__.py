@@ -95,7 +95,7 @@ def _command_as(context, args):
         except MathParseError as ex:
             print(f"Error: {ex.args[0]}")
         else:
-            print(" " * len(str(len(context.outputs))) + "  " + context.outputs[-1].stringify(context, unit))
+            print(" " * len(str(len(context.outputs))) + "   " + context.outputs[-1].stringify(context, unit))
     else:
         print(HELP_AS)
 
