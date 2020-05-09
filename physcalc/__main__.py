@@ -5,31 +5,34 @@ import sys
 
 from physcalc import parser
 from physcalc.constants import CONSTANTS_MATH, VARS
-from physcalc.context import Context, FEATURE_DEBUG
+from physcalc.context import Context, Feature
 from physcalc.helps import HELPS, HELP_GLOBAL, HELP_LOAD, HELP_TOGGLE, HELP_SOURCE
 from physcalc.util import MathParseError, MathEvalError
 from physcalc.value import Value
 
 APPLICATION = "ρhysCalc"
-VERSION = "0.2"
+VERSION = "0.3"
 
 LAUNCH_CREDITS = APPLICATION + " REPL " + VERSION
 LAUNCH_HELP = "Type !help for help"
 
 COMMANDS = {}
 
+
 def _register_command(name):
-    def wrapper(func):
+    def registrar(func):
         COMMANDS[name] = func
         return func
-    return wrapper
+    return registrar
+
 
 @_register_command("!help")
-def _command_help(_, args):
+def _command_help(_context, args):
     if args and args[0] in HELPS:
         print(HELPS[args[0]])
     else:
         print(HELP_GLOBAL)
+
 
 @_register_command("!load")
 def _command_load(context, args):
@@ -38,29 +41,39 @@ def _command_load(context, args):
     else:
         context.variables.update(VARS[args[0]])
 
+
 @_register_command("!vars")
-def _command_vars(context, _):
+def _command_vars(context, _args):
     for var in sorted(context.variables):
         print(var + " = " + context.variables[var].evaluate(context, []).stringify(context))
 
+
 @_register_command("!reset")
-def _command_reset(context, _):
+def _command_reset(context, _args):
     context.variables = dict(CONSTANTS_MATH)
     context.outputs.clear()
     print("Variables and history cleared.")
 
+
 @_register_command("!clear")
-def _command_clear(context, _):
+def _command_clear(context, _args):
     context.outputs.clear()
     print("History cleared.")
 
+
 @_register_command("!toggle")
 def _command_toggle(context, args):
-    if args and args[0] in context.features:
-        context.features[args[0]] = not context.features[args[0]]
-        print("Toggled " + args[0] + " " + ["off", "on"][context.features[args[0]]] + ".")
+    if args:
+        try:
+            feature = Feature(args[0])
+        except ValueError:
+            print(HELP_TOGGLE)
+        else:
+            context.features[feature] = not context.features[feature]
+            print("Toggled " + feature.value + " " + ["off", "on"][context.features[feature]] + ".")
     else:
         print(HELP_TOGGLE)
+
 
 @_register_command("!source")
 def _command_source(context, args):
@@ -69,15 +82,18 @@ def _command_source(context, args):
     else:
         print(HELP_SOURCE)
 
+
 @_register_command("!exit")
-def _command_exit(context, args):
+def _command_exit(_context, _args):
     sys.exit(0)
+
 
 def _run_command(context, command, *args):
     if command in COMMANDS:
         COMMANDS[command](context, args)
     else:
         print("Unknown command " + command + ". Type !help for help.")
+
 
 def _run_line(context, line):
     if not line or line.startswith("#"):
@@ -86,17 +102,18 @@ def _run_line(context, line):
         _run_command(context, *line.split(None))
         return
     assigns, code = parser.parse_input(line, context)
-    if context.features[FEATURE_DEBUG]:
+    if context.features[Feature.DEBUG]:
         print("(" + str(len(context.outputs) + 1) + ") " + code.stringify(context))
     result = code.evaluate(context, [])
     context.outputs.append(result)
     for variable in assigns:
         context.variables[variable.name] = result
     print("[" + str(len(context.outputs)) + "] " + result.stringify(context), end="")
-    if isinstance(result, Value) and result.unit.variable is not None:
-        print(" (" + result.unit.variable + ")")
+    if isinstance(result, Value) and result.unit.quantity_name is not None:
+        print(" (" + result.unit.quantity_name + ")")
     else:
         print()
+
 
 def _run_file(context, file):
     try:
@@ -120,6 +137,7 @@ def _run_file(context, file):
             break
     return True
 
+
 def _setup_readline():
     # setup readline if on posix
     if os.name == "posix":
@@ -136,6 +154,7 @@ def _setup_readline():
             atexit.register(readline.write_history_file, history_file)
         except ImportError:
             pass
+
 
 def _main():
     argparser = argparse.ArgumentParser(description="Runs the %s REPL." % APPLICATION)
@@ -172,5 +191,6 @@ def _main():
             print("Error: " + ex.args[0])
 
     return 0
+
 
 sys.exit(_main())

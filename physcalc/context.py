@@ -1,7 +1,12 @@
-FEATURE_DEBUG = "debug"
-FEATURE_FRAC = "frac"
-FEATURE_GRAPHIC = "graphic"
-FEATURE_CONT = "cont"
+from enum import Enum
+
+
+class Feature(Enum):
+    DEBUG = "debug"
+    FRAC = "frac"
+    GRAPHIC = "graphic"
+    CONT = "cont"
+
 
 class Context:
     def __init__(self):
@@ -9,8 +14,8 @@ class Context:
         self.outputs = []
         self.variables = dict(CONSTANTS_MATH)
         self.features = {
-            FEATURE_DEBUG: False,
-            FEATURE_FRAC: False,
-            FEATURE_GRAPHIC: False,
-            FEATURE_CONT: True,
+            Feature.DEBUG: False,
+            Feature.FRAC: False,
+            Feature.GRAPHIC: False,
+            Feature.CONT: True,
         }

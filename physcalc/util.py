@@ -1,7 +1,14 @@
-class debug: # pylint: disable=invalid-name
+from numbers import Complex
+
+from physcalc.context import Feature
+
+
+class debug:  # pylint: disable=invalid-name
     recur = 0
+
     def __init__(self, func):
         self.func = func
+
     def __call__(self, *args, **kwargs):
         argstr = [self.func.__name__]
         argstr.extend(repr(arg) for arg in args)
@@ -12,16 +19,20 @@ class debug: # pylint: disable=invalid-name
         debug.recur -= 1
         print(" " * debug.recur + "<" + self.func.__name__ + " " + repr(ret))
         return ret
-    
+
+
 def iterlen(itr):
     return sum(1 for _ in itr)
+
 
 SUP_CHARS = "⁰¹²³⁴⁵⁶⁷⁸⁹⁻"
 DECIMAL_TO_SUP = dict(zip(map(ord, "0123456789-"), SUP_CHARS))
 SUP_TO_DECIMAL = dict(zip(map(ord, SUP_CHARS), "0123456789-"))
 
+
 def generate_sup_power(power):
     return str(power).translate(DECIMAL_TO_SUP) if power != 1 else ""
+
 
 def parse_power(text):
     if "^" in text:
@@ -31,11 +42,29 @@ def parse_power(text):
         return unit, text[len(unit):].translate(SUP_TO_DECIMAL)
     return text, 1
 
+
 class MathParseError(Exception):
     pass
 
+
 class MathEvalError(Exception):
     pass
+
+
+def ensure_real(num: Complex):
+    if num.imag != 0:
+        raise ValueError(f"can't convert {num} to real")
+    return num.real
+
+
+def ensure_int(num: Complex):
+    num = ensure_real(num)
+    if isinstance(num, int):
+        return num
+    if isinstance(num, float) and num.is_integer():
+        return int(num)
+    raise ValueError(f"can't convert {num} to integer")
+
 
 def scientific(num, imag=""):
     if num.imag != 0:
@@ -58,3 +87,11 @@ def scientific(num, imag=""):
         mul *= 10
         power += 1
     return str(float(num / mul)) + "\xB710" + generate_sup_power(power) + ("\xB7" + imag if imag else "")
+
+
+def stringify_frac(frac, context):
+    if context is not None and context.features[Feature.GRAPHIC]:
+        raise NotImplementedError
+    if frac.denominator == 1:
+        return str(frac.numerator)
+    return "%s/%s" % (frac.numerator, frac.denominator)

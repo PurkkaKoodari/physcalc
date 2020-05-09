@@ -1,4 +1,5 @@
-from physcalc import constants, context
+from physcalc.constants import VARS
+from physcalc.context import Feature
 
 HELP_SYNTAX = """PhysCalc parses input as operators and values.
 
@@ -13,6 +14,7 @@ Previous results can be referred to as [num].
 The following operators are supported: + - * / ^
 
 See also: !help greek, !help vars"""
+
 HELP_GREEK = """Greek characters can be typed as \\x, with x from this table:
 
  x | a b c d e f g h i j k l m n o p q r s t u v w x y z
@@ -26,26 +28,28 @@ Most characters translate to their Greek counterparts. Exceptions:
  - \\j = η (eta)
  - \\q = ψ (psi)
  - \\v = θ (theta)"""
+
 HELP_VARS = """Variables are used by their name, not prefixed by a number.
 
 Variables can be assigned using
 var := value-expression
 
 Undefined variables are not evaluated, but stay in the result."""
+
 HELP_LOAD = """Usage: !load <vars>
 Load variables to the context.
-<vars> can be one of """ + ", ".join(sorted(constants.VARS))
-HELP_TOGGLE = """Usage: !toggle <feat>
+<vars> can be one of """ + ", ".join(sorted(VARS))
+
+HELP_TOGGLE = f"""Usage: !toggle <feat>
 Toggles a feature of the interpreter. Features:
-%-7s - show parsed inputs before evaluating
-%-7s - use fractions for output whenever possible
-%-7s - draw results graphically
-%-7s - assume previous result when input starts with operator""" % (
-    context.FEATURE_DEBUG, context.FEATURE_FRAC,
-    context.FEATURE_GRAPHIC, context.FEATURE_CONT,
-)
+{Feature.DEBUG.value:7s} - show parsed inputs before evaluating
+{Feature.FRAC.value:7s} - use fractions for output whenever possible
+{Feature.GRAPHIC.value:7s} - draw results graphically
+{Feature.CONT.value:7s} - assume previous result when input starts with operator"""
+
 HELP_SOURCE = """Usage: !source <file>
 Executes <file> in the current REPL."""
+
 HELP_COMMANDS = """Commands:
 !help [topic]  - show help
 !load <vars>   - load constants
@@ -55,6 +59,7 @@ HELP_COMMANDS = """Commands:
 !toggle <feat> - toggle features
 !source <file> - execute file
 !exit          - quit REPL"""
+
 HELPS = {
     "syntax": HELP_SYNTAX,
     "greek": HELP_GREEK,
@@ -63,6 +68,7 @@ HELPS = {
     "load": HELP_LOAD,
     "toggle": HELP_TOGGLE,
 }
+
 HELP_GLOBAL = """Type expressions to compute them.
 Type !help <topic> to get help on a specific topic.
 Topics: """ + ", ".join(sorted(HELPS))
