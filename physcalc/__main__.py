@@ -158,6 +158,9 @@ def _main():
         prompt = " " * len(str(len(context.outputs))) + " > "
         try:
             line = input(prompt).strip()
+        except KeyboardInterrupt:
+            print("Type !exit or press " + ("Ctrl-Z + Enter" if os.name == "nt" else "Ctrl-D") + " to quit.")
+            continue
         except EOFError:
             print()
             break
