@@ -1,7 +1,7 @@
 import re
 from abc import ABC, abstractmethod
 from fractions import Fraction
-from typing import List
+from typing import List, Optional
 
 from physcalc.context import Context, Feature
 from physcalc.operator import (OpPrecedence, OPERATOR_ADD, OPERATOR_SUBTRACT, OPERATOR_MULTIPLY, OPERATOR_DIVIDE,
@@ -19,11 +19,14 @@ class ExpressionPart(ABC):
         pass
 
     @abstractmethod
-    def stringify(self, context):
+    def stringify(self, context: Optional[Context], unit: Optional[Unit]):
         pass
 
     def __repr__(self):
-        return f"<{type(self).__name__} {self.stringify(None)}>"
+        return f"<{type(self).__name__} {self.stringify(None, None)}>"
+
+    def __str__(self):
+        return self.stringify(None, None)
 
     def __add__(self, other):
         return OperatorExpression([self, other], [OPERATOR_ADD])
@@ -69,9 +72,11 @@ class Value(ExpressionPart, Token):
             self.unit = unit
         assert self.unit.multiplier == 1
 
-    def stringify(self, context):
+    def stringify(self, context, unit):
         if context is not None and context.features[Feature.FRAC] and isinstance(self.number, Fraction):
             return stringify_frac(self.number, context) + " " + self.unit.name
+        if unit is not None and unit is not NO_UNIT and self.unit.can_convert(unit):
+            return scientific(self.number / unit.multiplier) + " " + unit.name
         if self.unit is NO_UNIT:
             return scientific(self.number)
         return scientific(self.number) + " " + self.unit.name
@@ -132,19 +137,19 @@ class Value(ExpressionPart, Token):
                 number = float(num)
             else:
                 number = int(num)
-        unit_mul, unit = Unit.parse(text[unit_start:])
+        unit_mul, unit = Unit.parse(text[unit_start:]).to_si()
         return Value(number * unit_mul, unit)
 
 
-def _stringify_expr(expr: ExpressionPart, max_paren_prec: OpPrecedence, context: Context):
+def _stringify_expr(expr: ExpressionPart, max_paren_prec: OpPrecedence, context: Optional[Context], unit: Optional[Unit]):
     """Converts an expression to its code string.
 
     If the expression's precedence is at most max_paren_prec, the result is wrapped in parenthesis.
     """
     if ((isinstance(expr, OperatorExpression) and expr.prec <= max_paren_prec)
             or (isinstance(expr, PowerExpression) and OpPrecedence.POWER <= max_paren_prec)):
-        return f"({expr.stringify(context)})"
-    return expr.stringify(context)
+        return f"({expr.stringify(context, unit)})"
+    return expr.stringify(context, unit)
 
 
 class OperatorExpression(ExpressionPart):
@@ -179,9 +184,9 @@ class OperatorExpression(ExpressionPart):
             else:
                 self.subexprs.append(expr)
 
-    def stringify(self, context):
-        return _stringify_expr(self.subexprs[0], self.prec, context) + "".join(
-            " " + oper.name + " " + _stringify_expr(expr, self.prec, context)
+    def stringify(self, context, unit):
+        return _stringify_expr(self.subexprs[0], self.prec, context, unit) + "".join(
+            " " + oper.name + " " + _stringify_expr(expr, self.prec, context, unit)
             for expr, oper in zip(self.subexprs[1:], self.operators)
         )
 
@@ -212,8 +217,8 @@ class PowerExpression(ExpressionPart):
     def __init__(self, subexprs: List[ExpressionPart]):
         self.subexprs = subexprs
 
-    def stringify(self, context):
-        return " ^ ".join(_stringify_expr(expr, OpPrecedence.POWER, context) for expr in self.subexprs)
+    def stringify(self, context, unit):
+        return " ^ ".join(_stringify_expr(expr, OpPrecedence.POWER, context, unit) for expr in self.subexprs)
 
     def evaluate(self, context, var_stack):
         accum_value = self.subexprs[-1].evaluate(context, var_stack)
@@ -233,8 +238,8 @@ class UnaryMinus(ExpressionPart):
     def __init__(self, subexpr):
         self.subexpr = subexpr
 
-    def stringify(self, context):
-        return "-" + _stringify_expr(self.subexpr, OpPrecedence.POWER, context)
+    def stringify(self, context, unit):
+        return "-" + _stringify_expr(self.subexpr, OpPrecedence.POWER, context, unit)
 
     def evaluate(self, context, var_stack):
         return -self.subexpr.evaluate(context, var_stack)
@@ -260,7 +265,7 @@ class Variable(ExpressionPart, Token):
     def __init__(self, name: str):
         self.name = name
 
-    def stringify(self, _context):
+    def stringify(self, context, unit):
         return self.name
 
     def token_name(self):
@@ -291,7 +296,7 @@ class Output(ExpressionPart, Token):
     def evaluate(self, context, var_stack):
         return context.outputs[self.index - 1].evaluate(context, var_stack)
 
-    def stringify(self, _context):
+    def stringify(self, context, unit):
         return f"[{self.index}]"
 
     def token_name(self):

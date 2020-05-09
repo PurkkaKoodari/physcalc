@@ -5,10 +5,12 @@ from enum import IntEnum
 from fractions import Fraction
 from itertools import groupby, combinations, permutations
 from numbers import Real
-from typing import Iterable, Tuple, List, Dict
+from typing import Iterable, Tuple, List, Dict, TypeVar, Optional, Set, Mapping
 
 from physcalc.util import (MathParseError, MathEvalError, parse_power, generate_sup_power, iterlen, ensure_real,
                            ensure_int)
+
+T = TypeVar("T")
 
 
 class BaseUnit(IntEnum):
@@ -59,43 +61,41 @@ MUL_PREFIXES = [
 WHITESPACE_RE = re.compile(r"\s+")
 
 
-def _parse_multiplied_unit(unit_name: str) -> "Tuple[Real, Unit]":
-    """Parses a unit name with optional multiplier into a multiplier and non-multiplied unit."""
+def _parse_multiplied_unit(unit_name: str) -> "Unit":
+    """Parses a unit name with optional multiplier."""
     for prefix, prefix_mul in MUL_PREFIXES:
         for name, unit in Unit.name_registry.items():
             if unit_name == prefix + name:
-                unit_mul, unit = unit.to_si()
-                prefix_mul *= unit_mul
-                return prefix_mul, unit
+                return unit * prefix_mul
     raise MathParseError(f"unknown unit {unit_name}")
 
 
-def _parse_unit_half(text):
-    """Parses unit names separated by whitespace into a multiplier and non-multiplied unit."""
-    result = NO_UNIT
-    total_mul = Fraction(1, 1)
+def _parse_unit_half(text) -> "Tuple[Unit, Mapping[str, int]]":
+    """Parses unit names separated by whitespace into a single unit and a name list."""
+    total_unit = NO_UNIT
+    total_names = Counter()
     parts = WHITESPACE_RE.split(text)
     if parts == ["1"]:
-        return total_mul, result
+        return total_unit, total_names
     for part in parts:
         if not part:
             continue
         unit_name, power = parse_power(part)
-        mul, unit = _parse_multiplied_unit(unit_name)
+        unit = _parse_multiplied_unit(unit_name)
         try:
             power = int(power)
         except ValueError:
             raise MathParseError(f"invalid power {power}") from None
         for _ in range(power):
-            result *= unit
-            total_mul *= mul
+            total_unit *= unit
+            total_names[unit_name] += 1
         for _ in range(-power):
-            result /= unit
-            total_mul /= mul
-    return total_mul, result
+            total_unit /= unit
+            total_names[unit_name] -= 1
+    return total_unit, total_names
 
 
-def _cancel_unit_parts(num: Iterable[BaseUnit], denom: Iterable[BaseUnit]):
+def _cancel_unit_parts(num: Iterable[T], denom: Iterable[T]) -> Tuple[Tuple[T, ...], Tuple[T, ...]]:
     """Simplifies a numerator-denumerator pair."""
     counts = Counter(num)
     counts.subtract(denom)
@@ -109,14 +109,14 @@ def _cancel_unit_parts(num: Iterable[BaseUnit], denom: Iterable[BaseUnit]):
     return tuple(num_list), tuple(denom_list)
 
 
-def _generate_base_name(part: Iterable[BaseUnit]) -> Tuple[str, int]:
-    """Generates a unit name from a sorted list of base units."""
+def _generate_base_name_half(part: Iterable[str]) -> Tuple[str, int]:
+    """Generates a unit name with powers from a sorted list of unit names."""
     if not part:
         return "1", 1
     units = []
     weight = 1
     for unit, power in groupby(part):
-        units.append(BASE_UNIT_NAMES[unit] + generate_sup_power(iterlen(power)))
+        units.append(unit + generate_sup_power(iterlen(power)))
         weight *= 2
     return " ".join(units), weight
 
@@ -137,10 +137,16 @@ def _multiply_list_by_frac(lst, frac):
 class Unit:
     part_registry: "Dict[tuple, Unit]" = {}
     name_registry: "Dict[str, Unit]" = {}
-    output_units: "List[Unit]" = []
+    output_units: "Set[Unit]" = set()
     named_units: "List[Unit]" = []
 
-    def __init__(self, specific_name, num, denom, output_weight=1000, quantity_name=None, multiplier=1):
+    specific_name: bool
+    _name: Optional[str]
+    output_weight: int
+    quantity_name: Optional[str]
+    multiplier: Real
+
+    def __init__(self, specific_name: Optional[str], num, denom, output_weight: int = 1000, quantity_name: Optional[str] = None, multiplier: Real = 1):
         self.specific_name = specific_name is not None
         self._name = specific_name
         self._num = num
@@ -156,27 +162,27 @@ class Unit:
         Unit.part_registry[key] = self
 
     def _register_name(self, derivative):
-        if self.specific_name:
-            if self.name in Unit.name_registry:
-                raise ValueError(f"unit with name {self.name} already registered")
-            Unit.named_units.append(self)
-            if not derivative:
-                Unit.output_units.append(self)
-            Unit.name_registry[self.name] = self
+        if self.name in Unit.name_registry:
+            raise ValueError(f"unit with name {self.name} already registered")
+        Unit.named_units.append(self)
+        if not derivative:
+            Unit.output_units.add(self)
+        Unit.name_registry[self.name] = self
 
-    def register_derivative(self, specific_name, multiplier):
+    def register_derivative(self, specific_name: str, multiplier: Real):
         """Creates a new derivative Unit of this Unit."""
         deriv = Unit(specific_name, self._num, self._denom, 1000, self.quantity_name, self.multiplier * multiplier)
         deriv._register_name(True)
         return deriv
 
     @staticmethod
-    def register(specific_name, output_weight, quantity_name, num, denom=()):
+    def register(specific_name: Optional[str], output_weight: int, quantity_name: str, num, denom=()):
         """Creates a new Unit with the given properties."""
         num, denom = _cancel_unit_parts(num, denom)
         created = Unit(specific_name, num, denom, output_weight, quantity_name)
         created._register_key()
-        created._register_name(False)
+        if specific_name is not None:
+            created._register_name(False)
         return created
 
     @staticmethod
@@ -197,11 +203,20 @@ class Unit:
 
     @staticmethod
     def parse(name):
-        """Parses a unit specification into a multiplier and non-multiplied Unit."""
+        """Parses a unit specification.
+
+        The resulting unit will keep the given name and may be multiplied. To convert it to a non-multiplied unit,
+        use to_si().
+        """
         num, denom = name.split("/") if "/" in name else (name, "")
-        num_mul, num = _parse_unit_half(num)
-        denom_mul, denom = _parse_unit_half(denom)
-        return num_mul / denom_mul, num / denom
+        num, num_names = _parse_unit_half(num)
+        denom, denom_names = _parse_unit_half(denom)
+        num_names, denom_names = _cancel_unit_parts(num_names, denom_names)
+        name = _generate_base_name_half(num_names)[0]
+        if denom_names:
+            name += " / " + _generate_base_name_half(denom_names)[0]
+        unit = num / denom
+        return Unit(name, unit._num, unit._denom, 1000, unit.quantity_name, unit.multiplier)
 
     @property
     def name(self):
@@ -212,11 +227,11 @@ class Unit:
     def _generate_name(self):
         """Generates potential names for a unit."""
         if not self._num and not self._denom:
-            return [("", 0)]
+            return ""
         # generate name derived from the base units that make up this unit
-        basic_name, basic_weight = _generate_base_name(self._num)
+        basic_name, basic_weight = _generate_base_name_half(BASE_UNIT_NAMES[unit] for unit in self._num)
         if self._denom:
-            basic_denom, denom_weight = _generate_base_name(self._denom)
+            basic_denom, denom_weight = _generate_base_name_half(BASE_UNIT_NAMES[unit] for unit in self._denom)
             basic_name += " / " + basic_denom
             basic_weight *= denom_weight
         results: List[Tuple[str, int]] = [(basic_name, basic_weight)]
@@ -226,23 +241,25 @@ class Unit:
             for power in range(-max_power, max_power + 1):
                 if 0 <= power <= 1:
                     continue
-                if self._matches(test ** power):
+                if self.can_convert(test ** power):
                     results.append((test.name + generate_sup_power(power), test.output_weight * 2))
         # generate all products of two known units
         for first, second in combinations(Unit.output_units, 2):
-            if self._matches(first * second):
+            if self.can_convert(first * second):
                 results.append((f"{first.name} {second.name}", first.output_weight * second.output_weight))
         # generate all quotients of two known units
         for num, denom in permutations(Unit.output_units, 2):
-            if self._matches(num / denom):
+            if self.can_convert(num / denom):
                 results.append((f"{num.name} / {denom.name}", num.output_weight * denom.output_weight))
         # pick the name with the minimum weight
         return min(results, key=lambda pair: pair[1])[0]
 
-    def _matches(self, other: "Unit"):
+    def can_convert(self, other: "Unit"):
         return self._num == other._num and self._denom == other._denom
 
     def __mul__(self, other):
+        if isinstance(other, Real):
+            return Unit.from_parts(self._num, self._denom, self.multiplier * other)
         if not isinstance(other, Unit):
             return NotImplemented
         return Unit.from_parts(self._num + other._num, self._denom + other._denom, self.multiplier * other.multiplier)
@@ -295,14 +312,20 @@ class Unit:
             return True
         if not isinstance(other, Unit):
             return False
-        return self._num == other._num and self._denom == other._denom and self.multiplier == other.multiplier
+        return self.name == other.name and self._num == other._num and self._denom == other._denom and self.multiplier == other.multiplier
+
+    def __hash__(self):
+        return hash((self.name, self._num, self._denom, self.multiplier))
+
+    def __str__(self):
+        return self.name or "1"
 
     def __repr__(self):
-        return f"<unit {self.name}>"
+        return f"<unit {self.name or '1'}>"
 
     def to_si(self):
         """Converts this Unit to a multiplier and non-multiplied unit."""
-        if self.multiplier == 1:
+        if self in Unit.output_units:
             return 1, self
         return self.multiplier, Unit.from_parts(self._num, self._denom, 1)
 
@@ -377,6 +400,7 @@ LUMINOUS_EFFICACY = Unit.register(None, 5, "luminous efficacy", (BaseUnit.CANDEL
 RADIOACTIVE_EXPOSURE = Unit.register(None, 5, "radioactive exposure", (BaseUnit.AMPERE, BaseUnit.SECOND), (BaseUnit.KILOGRAM,))
 
 # Multiplied SI units
+ANGSTROM = METER.register_derivative("Å", Fraction(1, 10 ** 10))
 GRAM = KILOGRAM.register_derivative("g", Fraction(1, 1000))
 ERG = JOULE.register_derivative("erg", Fraction(1, 10 ** 7))
 LITER = VOLUME.register_derivative("l", Fraction(1, 1000))
@@ -392,6 +416,7 @@ MINUTE = SECOND.register_derivative("min", 60)
 HOUR = MINUTE.register_derivative("h", 60)
 DAY = HOUR.register_derivative("d", 24)
 
+ASTRONOMICAL_UNIT = METER.register_derivative("AU", 149597870700)
 KILOMETER_PER_HOUR = SPEED.register_derivative("kph", 1000 / HOUR.multiplier)
 
 DEGREE = NO_UNIT.register_derivative("deg", math.pi / 180)

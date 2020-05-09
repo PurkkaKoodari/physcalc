@@ -50,6 +50,10 @@ Toggles a feature of the interpreter. Features:
 HELP_SOURCE = """Usage: !source <file>
 Executes <file> in the current REPL."""
 
+HELP_AS = """Usage: !as <unit>
+Prints the latest result in the given unit.
+!as <unit> may also be appended to any calculation."""
+
 HELP_COMMANDS = """Commands:
 !help [topic]  - show help
 !load <vars>   - load constants
@@ -57,6 +61,7 @@ HELP_COMMANDS = """Commands:
 !reset         - reset variables and outputs
 !clear         - reset output history
 !toggle <feat> - toggle features
+!as <unit>     - print in different units
 !source <file> - execute file
 !exit          - quit REPL"""
 

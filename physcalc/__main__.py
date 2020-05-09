@@ -6,7 +6,8 @@ import sys
 from physcalc import parser
 from physcalc.constants import CONSTANTS_MATH, VARS
 from physcalc.context import Context, Feature
-from physcalc.helps import HELPS, HELP_GLOBAL, HELP_LOAD, HELP_TOGGLE, HELP_SOURCE
+from physcalc.helps import HELPS, HELP_GLOBAL, HELP_LOAD, HELP_TOGGLE, HELP_SOURCE, HELP_AS
+from physcalc.unit import Unit
 from physcalc.util import MathParseError, MathEvalError
 from physcalc.value import Value
 
@@ -45,7 +46,7 @@ def _command_load(context, args):
 @_register_command("!vars")
 def _command_vars(context, _args):
     for var in sorted(context.variables):
-        print(var + " = " + context.variables[var].evaluate(context, []).stringify(context))
+        print(var + " = " + context.variables[var].evaluate(context, []).stringify(context, None))
 
 
 @_register_command("!reset")
@@ -83,6 +84,22 @@ def _command_source(context, args):
         print(HELP_SOURCE)
 
 
+@_register_command("!as")
+def _command_as(context, args):
+    if args:
+        if not context.outputs:
+            print("You must perform a calculation before using !as.")
+            return
+        try:
+            unit = Unit.parse(" ".join(args))
+        except MathParseError as ex:
+            print(f"Error: {ex.args[0]}")
+        else:
+            print(" " * len(str(len(context.outputs))) + "  " + context.outputs[-1].stringify(context, unit))
+    else:
+        print(HELP_AS)
+
+
 @_register_command("!exit")
 def _command_exit(_context, _args):
     sys.exit(0)
@@ -101,14 +118,14 @@ def _run_line(context, line):
     if line[0] == "!":
         _run_command(context, *line.split(None))
         return
-    assigns, code = parser.parse_input(line, context)
+    assigns, code, cast = parser.parse_input(line, context)
     if context.features[Feature.DEBUG]:
-        print("(" + str(len(context.outputs) + 1) + ") " + code.stringify(context))
+        print("(" + str(len(context.outputs) + 1) + ") " + code.stringify(context, None))
     result = code.evaluate(context, [])
     context.outputs.append(result)
     for variable in assigns:
         context.variables[variable.name] = result
-    print("[" + str(len(context.outputs)) + "] " + result.stringify(context), end="")
+    print("[" + str(len(context.outputs)) + "] " + result.stringify(context, cast), end="")
     if isinstance(result, Value) and result.unit.quantity_name is not None:
         print(" (" + result.unit.quantity_name + ")")
     else:
@@ -178,6 +195,7 @@ def _main():
         try:
             line = input(prompt).strip()
         except KeyboardInterrupt:
+            print()
             print("Type !exit or press " + ("Ctrl-Z + Enter" if os.name == "nt" else "Ctrl-D") + " to quit.")
             continue
         except EOFError:

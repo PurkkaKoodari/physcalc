@@ -3,7 +3,8 @@ import re
 from physcalc.context import Feature
 from physcalc.operator import Operator
 from physcalc.syntax import (ESCAPE_REGEX, TOKEN_OUTPUT, TOKEN_OPERATOR, TOKEN_VARIABLE, TOKEN_VALUE, TOKEN_SPECIAL,
-                             Token)
+                             Token, TOKEN_CAST)
+from physcalc.unit import Unit
 from physcalc.util import MathParseError
 from physcalc.value import Output, Variable, Value, OperatorExpression, PowerExpression, UnaryMinus, OpPrecedence
 
@@ -24,6 +25,22 @@ SpecialToken.LEFT_PAREN = SpecialToken("left paren")
 SpecialToken.RIGHT_PAREN = SpecialToken("right paren")
 SpecialToken.COMMA = SpecialToken("comma")
 
+
+class UnitCast(Token):
+    unit: Unit
+
+    def __init__(self, unit):
+        self.unit = unit
+
+    def token_name(self):
+        return f"conversion to {self.unit.name}"
+
+    @staticmethod
+    def parse(text, _):
+        unit = Unit.parse(text[3:].strip())
+        return UnitCast(unit)
+
+
 MAX_UNIT_WEIGHT = 5
 
 LATIN_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -38,6 +55,7 @@ SPECIAL_TOKENS = {
 }
 
 PARSER = [
+    (UnitCast.parse, re.compile(TOKEN_CAST)),
     (Output.parse, re.compile(TOKEN_OUTPUT)),
     (Operator.parse, re.compile(TOKEN_OPERATOR)),
     (Variable.parse, re.compile(TOKEN_VARIABLE)),
@@ -109,6 +127,8 @@ def parse_input(text, context):
                 return parse_recursive(OpPrecedence.ADD, True, True)
             else:
                 raise MathParseError("found " + tokens[pos].token_name() + " when expecting a value")
+        elif isinstance(tokens[pos], UnitCast):
+            raise MathParseError("found " + tokens[pos].token_name() + " when expecting a value")
         else:
             pos += 1
             return tokens[pos - 1]
@@ -133,6 +153,8 @@ def parse_input(text, context):
                 operators.append(tokens[pos])
                 pos += 1
                 subexprs.append(parse_recursive(prec + 1, allow_paren, False))
+            elif isinstance(tokens[pos], UnitCast):
+                break
             else:
                 raise MathParseError("found " + tokens[pos].token_name() + " when expecting an operator")
         if len(subexprs) == 1:
@@ -141,4 +163,14 @@ def parse_input(text, context):
             return PowerExpression(subexprs)
         return OperatorExpression(subexprs, operators)
 
-    return assignments, parse_recursive(OpPrecedence.ADD, False, False)
+    expression = parse_recursive(OpPrecedence.ADD, False, False)
+    cast = None
+
+    if pos < len(tokens):
+        if not isinstance(tokens[pos], UnitCast):
+            raise MathParseError("found " + tokens[pos].token_name() + " when expecting end of input")
+        if pos != len(tokens) - 1:
+            raise MathParseError("found " + tokens[pos + 1].token_name() + " after " + tokens[pos].token_name())
+        cast = tokens[pos].unit
+
+    return assignments, expression, cast
