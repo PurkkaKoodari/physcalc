@@ -121,7 +121,7 @@ def _cancel_unit_parts(num: Iterable[T], denom: Iterable[T]) -> Tuple[Tuple[T, .
 def _generate_base_name_half(part: Iterable[str]) -> Tuple[str, int]:
     """Generates a unit name with powers from a sorted list of unit names."""
     if not part:
-        return "1", 1
+        return "", 1
     units = []
     weight = 1
     for unit, power in groupby(part):

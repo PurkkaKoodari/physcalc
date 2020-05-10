@@ -7,6 +7,7 @@ from physcalc import parser
 from physcalc.constants import CONSTANTS_MATH, VARS
 from physcalc.context import Context, Feature
 from physcalc.helps import HELPS, HELP_GLOBAL, HELP_LOAD, HELP_TOGGLE, HELP_SOURCE, HELP_AS
+from physcalc.parser import replace_escapes
 from physcalc.unit import Unit
 from physcalc.util import MathParseError, MathEvalError
 from physcalc.value import Value
@@ -91,7 +92,7 @@ def _command_as(context, args):
             print("You must perform a calculation before using !as.")
             return
         try:
-            unit = Unit.parse(" ".join(args))
+            unit = Unit.parse(replace_escapes(" ".join(args)))
         except MathParseError as ex:
             print(f"Error: {ex.args[0]}")
         else:

@@ -2,6 +2,7 @@ import math
 import re
 from abc import ABC, abstractmethod
 from fractions import Fraction
+from numbers import Rational
 from typing import List, Optional
 
 from physcalc.context import Context, Feature
@@ -65,8 +66,11 @@ class ExpressionPart(ABC):
 
 def _prefix_cost(value):
     value = abs(value)
+    if value == 0:
+        return 1
     if value < 1:
-        return 4 - math.log10(value)
+        cost = 0 if isinstance(value, Rational) else 4
+        return cost - math.log10(value)
     return math.log10(value)
 
 
@@ -87,9 +91,6 @@ class Value(ExpressionPart, Token):
         else:
             value = self.number
             unit = self.unit
-        # prioritize frac output
-        if context is not None and context.features[Feature.FRAC] and isinstance(value, Fraction):
-            return stringify_frac(value, context) + (" " + unit.name).rstrip()
         # attempt to choose a SI prefix
         if unit == KILOGRAM:  # special handling for kg -> g
             unit = GRAM
@@ -97,8 +98,13 @@ class Value(ExpressionPart, Token):
         disallowed = DISALLOWED_PREFIXES[unit]
         allowed = [prefix for prefix in MUL_PREFIXES if prefix not in disallowed]
         power = PREFIX_POWER[unit]
-        optimal = min(allowed, key=lambda prefix: _prefix_cost(value / MUL_PREFIXES[prefix] ** power))
-        return scientific(value / MUL_PREFIXES[optimal] ** power) + (" " + optimal + unit.name).rstrip()
+        optimal_prefix = min(allowed, key=lambda prefix: _prefix_cost(value / MUL_PREFIXES[prefix] ** power))
+        value /= MUL_PREFIXES[optimal_prefix] ** power
+        if context is not None and context.features[Feature.FRAC] and isinstance(value, Rational):
+            value = stringify_frac(value, context)
+        else:
+            value = scientific(value)
+        return value + (" " + optimal_prefix + unit.name).rstrip()
 
     def token_name(self):
         return "value " + self.__str__()
@@ -196,11 +202,15 @@ class OperatorExpression(ExpressionPart):
                 elif self.prec == OpPrecedence.ADD:
                     oper = oper.inverse
                     expr = expr.subexpr
-            self.operators.append(oper)
             if isinstance(expr, OperatorExpression) and expr.prec == self.prec:
+                self.operators.append(oper)
                 self.operators.extend(oper.distribute(expr_oper) for expr_oper in expr.operators)
                 self.subexprs.extend(expr.subexprs)
+            elif isinstance(expr, OperatorExpression) and expr.prec == OpPrecedence.MULTIPLY and self.prec == OpPrecedence.ADD and isinstance(expr.subexprs[0], UnaryMinus):
+                self.operators.append(OPERATOR_SUBTRACT.distribute(oper))
+                self.subexprs.append(OperatorExpression([UnaryMinus.create(expr.subexprs[0]), *expr.subexprs[1:]], expr.operators))
             else:
+                self.operators.append(oper)
                 self.subexprs.append(expr)
 
     def stringify(self, context, unit):

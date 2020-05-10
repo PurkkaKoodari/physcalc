@@ -5,7 +5,7 @@ HELP_SYNTAX = """PhysCalc parses input as operators and values.
 
 Values can be constants, expressed as a number followed by an optional unit.
 Numbers can be integers, integer ratios or decimal numbers.
-All SI units except for \xB0C, rad, sr, lm, Bq, Gy, Sv and kat are supported.
+All SI units and many other common ones are supported.
 All SI prefixes are supported, with µX or uX for micro.
 
 Values can also be variables, expressed with their name.

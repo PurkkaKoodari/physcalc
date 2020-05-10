@@ -37,6 +37,8 @@ def generate_sup_power(power):
 def parse_power(text):
     if "^" in text:
         return text.split("^", 1)
+    if "**" in text:
+        return text.split("**", 1)
     if text[-1] in SUP_CHARS:
         unit = text.rstrip(SUP_CHARS)
         return unit, text[len(unit):].translate(SUP_TO_DECIMAL)

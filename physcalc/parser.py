@@ -91,11 +91,15 @@ def _replace_escape(match):
         raise MathParseError("unknown escape \\" + char) from None
 
 
+def replace_escapes(text):
+    return ESCAPE_REGEX.sub(_replace_escape, text)
+
+
 def parse_input(text, context):
     # normalize µ (U+00B5 MICRO SIGN) to μ (U+03BC GREEK SMALL LETTER MU)
     text = text.replace("\xB5", "\u03BC")
     # parse escapes
-    text = ESCAPE_REGEX.sub(_replace_escape, text)
+    text = replace_escapes(text)
     tokens = list(_tokenize_input(text, context))
     pos = 0
     assignments = []
